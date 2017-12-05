@@ -74,7 +74,8 @@ wire dec_stall = (ex_wr_reg && (ex_dest_reg_addr == dec_src_reg1_addr ||
                 mem_dest_reg_addr == dec_src_reg2_addr)) ||
 (wb_wr_reg && (wb_dest_reg_addr == dec_src_reg1_addr ||
                 wb_dest_reg_addr == dec_src_reg2_addr));
-
+//assign hex_out = fetch_pc;
+//assign ledr_out = ex_pc_sel;
 StageFetch #(
     .DBITS (DBITS),
     .START_PC (START_PC),
@@ -93,15 +94,15 @@ StageFetch #(
 
 
 reg [DBITS-1:0] dec_pc;
-reg [INST_BIT_WIDTH - 1: 0] dec_inst_word;
+reg [INST_BIT_WIDTH - 1: 0] dec_inst_word = `DEAD;
 always @(posedge clk) begin
     if (dec_stall) begin
 
     end else if (ex_pc_sel) begin
         dec_pc <= 32'hzzzzzzz;
-        dec_inst_word <= 32'hzzzzzzz;
+        dec_inst_word <= `DEAD;
     end else begin
-        if (fetch_inst_word != 32'hdead) begin
+        if (fetch_inst_word != `DEAD) begin
             dec_pc <= fetch_pc;
             dec_inst_word <= fetch_inst_word;
 
@@ -141,25 +142,26 @@ StageDecode #(
 
 
 reg [DBITS-1:0] ex_pc;
-reg ex_wr_reg, ex_wr_mem;
+reg ex_wr_reg = 0;
+reg ex_wr_mem = 0;
 reg [REG_INDEX_BIT_WIDTH-1:0] ex_dest_reg_addr;
 reg [DBITS-1:0] ex_imm_ext, ex_imm16;
 reg [1:0] ex_sel_alu, ex_sel_reg_din;
 reg [DBITS-1:0] ex_reg1, ex_reg2;
-reg [3:0] ex_op_code;
+reg [3:0] ex_op_code = 4'b0100;
 reg [4:0] ex_alu_fn;
 always @(posedge clk) begin
     if (dec_stall || ex_pc_sel) begin
         ex_pc <= 32'hzzzzzzzz;
-        ex_wr_reg <= 1'bz;
-        ex_wr_mem <= 1'bz;
+        ex_wr_reg <= 1'b0;
+        ex_wr_mem <= 1'b0;
         ex_dest_reg_addr <= 4'hz;
         ex_imm_ext <= 32'hzzzzzzzz;
         ex_imm16 <= 32'hzzzzzzzz;
         ex_sel_alu <= 2'bzz;
         ex_reg1 <= 32'hzzzzzzzz;
         ex_reg2 <= 32'hzzzzzzzz;
-        ex_op_code <= 4'bzzzz;
+        ex_op_code <= 4'b0100;
         ex_alu_fn <= 5'bzzzzz;
         ex_sel_reg_din <= 2'bzz;
     end else begin
@@ -200,8 +202,8 @@ StageExecute #(
 
 
 reg [DBITS-1:0] mem_pc;
-reg mem_wr_reg;
-reg mem_wr_mem;
+reg mem_wr_reg = 0;
+reg mem_wr_mem = 0;
 reg [REG_INDEX_BIT_WIDTH-1:0] mem_dest_reg_addr;
 reg [DBITS-1:0] mem_imm16, mem_alu_out, mem_regs_out2;
 reg [1:0] mem_sel_reg_din;
@@ -238,7 +240,7 @@ StageMem #(
 );
 
 
-reg wb_wr_reg_in;
+reg wb_wr_reg_in = 0;
 reg [REG_INDEX_BIT_WIDTH-1:0] wb_dest_reg_addr;
 reg [DBITS-1:0] wb_imm16;
 reg [DBITS-1:0] wb_alu_out;

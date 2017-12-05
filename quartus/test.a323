@@ -7,15 +7,19 @@
 
 
 
-MVHI	IOBASE,r5
-ADDI    1,r0,r0
-SW	OFSHEX(r5),r0
-ADDI    0,r1,r1
-ADDI    0,r2,r2
-SW	OFSHEX(r5),r0
-ADDI    0,r3,r3
-ADDI    0,r4,r4
-.word 0xdead
+;MVHI	IOBASE,r5
+;ADDI    3,r0,r0
+;ADDI    0,r1,r1
+;ADDI    0,r2,r2
+;ADDI    0,r3,r3
+;ADDI    0,r4,r4
+;ADDI    0,r6,r6
+;SW	OFSHEX(r5),r0
+;ADDI    0,r1,r1
+;ADDI    0,r2,r2
+;ADDI    0,r3,r3
+;ADDI    0,r4,r4
+;.word 0xdead
 
 
 
@@ -27,8 +31,9 @@ ADDI    1,r0,r0
 SW	OFSHEX(r5),r0
 CALL	wait(r4)
 B	start1
+ADDI    0,r4,r4
 
-.word   0xdeaa
+.word   0xdead
 
 wait:
 XOR	r2,r2,r2

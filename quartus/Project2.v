@@ -28,6 +28,17 @@ PLL	PLL_inst (
     .outclk_0 (clk),
     .locked (lock)
 );
+/*
+reg clk2 = 0;
+reg [26: 0] count = 0;
+always @(posedge CLOCK_50) begin
+	if (count >= (1<<25)-1) begin
+		count <= 0;
+		clk2 <= ~clk2;
+	end else begin
+		count <= count + 1;
+	end
+end */
 
 wire reset = ~lock;
 

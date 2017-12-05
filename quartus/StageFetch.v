@@ -49,7 +49,6 @@ Register #(
 
 
 // Instruction memory signals
-assign inst_word_out = inst_word;
 InstMemory #(
     .MEM_INIT_FILE (IMEM_INIT_FILE),
     .ADDR_BIT_WIDTH (IMEM_ADDR_BIT_WIDTH),
