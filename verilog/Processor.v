@@ -2,14 +2,19 @@
 `define _PROCESSOR_
 
 `include "Processor.vh"
-`include "Alu.v"
-`include "SCProc-Controller.v"
-`include "InstMemory.v"
-`include "Mux4to1.v"
-`include "Register.v"
+`include "StageFetch.v"
+`include "StageDecode.v"
+`include "StageExecute.v"
+`include "StageMem.v"
+`include "StageWriteBack.v"
+// `include "Alu.v"
+// `include "SCProc-Controller.v"
+// `include "InstMemory.v"
+// `include "Mux4to1.v"
+// `include "Register.v"
 `include "RegisterFile.v"
-`include "SignExtension.v"
-`include "Memory.v"
+// `include "SignExtension.v"
+// `include "Memory.v"
 
 module Processor (
 input clk,
@@ -33,83 +38,13 @@ localparam INST_SIZE            = 32'd4;
 localparam INST_BIT_WIDTH       = 32;
 localparam START_PC             = 32'h40;
 localparam REG_INDEX_BIT_WIDTH  = 4;
-localparam IMEM_WORD_BITS       = 2;
-localparam DMEM_WORD_BITS       = 2;
 
 
-wire [DBITS-1:0] alu_out;
-reg [DBITS-1:0] alu_in2;
-
-// PC Mux
-always @(*) begin
-    case (sel_pc)
-        `PC_IN_IMM4:    pc_in = imm_ext4 + pc_out + 4;
-        `PC_IN_ALU:     pc_in = alu_out;
-        `PC_IN_PC4:     pc_in = pc_out + 4;
-        `PC_IN_PC:      pc_in = pc_out;
-        default:        pc_in = {DBITS{1'bz}};
-    endcase
-end
-
-// PC signals
-reg [DBITS - 1: 0] pc_in;
-wire [DBITS - 1: 0] pc_out;
-wire pc_en = 1'b1;
-Register #(
-    .BIT_WIDTH(DBITS), .RESET_VALUE(START_PC)
-    ) pc (
-    clk, reset, pc_en, pc_in, pc_out
-);
-
-
-// Instruction memory signals
-wire [INST_BIT_WIDTH - 1: 0] inst_word;
-assign inst_word_out = inst_word;
-InstMemory #(
-    IMEM_INIT_FILE,
-    IMEM_ADDR_BIT_WIDTH,
-    INST_BIT_WIDTH
-    ) instMem (
-	 .clk (clk),
-    .addr (pc_out[IMEM_ADDR_BIT_WIDTH + IMEM_WORD_BITS - 1: IMEM_WORD_BITS]),
-    .dataOut (inst_word)
-);
-
-
-// Control/data signals from decoder
-wire [4:0] alu_fn;
-wire [3:0] src_reg1, src_reg2, dest_reg;
-wire [15:0] imm;
-wire [1:0] sel_pc, sel_alu_sr2, sel_reg_din;
-wire wr_reg, wr_mem;
-SCProcController controller (
-    .data (inst_word),
-    .alu_out (alu_out),
-    .alu_fn (alu_fn),
-    .src_reg1 (src_reg1),
-    .src_reg2 (src_reg2),
-    .dest_reg (dest_reg),
-    .imm (imm),
-    .sel_alu_sr2 (sel_alu_sr2),
-    .sel_pc (sel_pc),
-    .sel_reg_din (sel_reg_din),
-    .wr_reg (wr_reg),
-    .wr_mem (wr_mem)
-);
-
-// Register File Mux
-always @(*) begin
-    case (sel_reg_din)
-        `REG_IN_PC4:    regs_din = pc_out + 4;
-        `REG_IN_DOUT:   regs_din = data_out;
-        `REG_IN_ALU:    regs_din = alu_out;
-        `REG_IN_IMM16:    regs_din = {imm, 16'b0};
-        default:        regs_din = {DBITS{1'bz}};
-    endcase
-end
-
-reg [DBITS-1:0] regs_din;
 wire [DBITS-1:0] regs_out1, regs_out2;
+wire [REG_INDEX_BIT_WIDTH-1:0] dec_src_reg1_addr, dec_src_reg2_addr, dec_dest_reg_addr;
+wire wb_wr_reg;
+wire [REG_INDEX_BIT_WIDTH - 1:0] wb_reg_addr;
+wire [DBITS-1:0] wb_reg_din;
 RegisterFile #(
     .BIT_WIDTH (DBITS),
     .REG_INDEX_WIDTH (REG_INDEX_BIT_WIDTH),
@@ -117,66 +52,228 @@ RegisterFile #(
     ) regs (
     .clk (clk),
     .reset (reset),
-    .en_write (wr_reg),
-    .sr1_ind (src_reg1),
-    .sr2_ind (src_reg2),
-    .dr_ind (dest_reg),
-    .data_in (regs_din),
+    .en_write (wb_wr_reg),
+    .sr1_ind (dec_src_reg1_addr),
+    .sr2_ind (dec_src_reg2_addr),
+    .dr_ind (wb_reg_addr),
+    .data_in (wb_reg_din),
+
     .sr1 (regs_out1),
     .sr2 (regs_out2)
 );
 
 
-// Sign extended signals
-wire [DBITS-1:0] imm_ext;
-wire [DBITS-1:0] imm_ext4 = {imm_ext[DBITS-3:0], 2'b00};
-SignExtension #(
-    .IN_BIT_WIDTH (16),
-    .OUT_BIT_WIDTH (DBITS)
-    ) sign_extend (
-    .dIn (imm),
-    .dOut (imm_ext)
-);
+wire [DBITS-1:0] fetch_pc;
+wire [INST_BIT_WIDTH - 1: 0] fetch_inst_word;
+wire [DBITS-1:0] ex_next_pc;
+assign inst_word_out = fetch_inst_word;
+wire ex_pc_sel;
+wire dec_stall = (ex_wr_reg && (ex_dest_reg_addr == dec_src_reg1_addr ||
+               ex_dest_reg_addr == dec_src_reg2_addr)) ||
+(mem_wr_reg && (mem_dest_reg_addr == dec_src_reg1_addr ||
+                mem_dest_reg_addr == dec_src_reg2_addr)) ||
+(wb_wr_reg && (wb_dest_reg_addr == dec_src_reg1_addr ||
+                wb_dest_reg_addr == dec_src_reg2_addr));
 
-
-// ALU input 2 Mux
-always @(*) begin
-    case (sel_alu_sr2)
-        `ALU_SRC2_REG2:     alu_in2 = regs_out2;
-        `ALU_SRC2_IMM:      alu_in2 = imm_ext;
-        `ALU_SRC2_IMM4:     alu_in2 = imm_ext4;
-        `ALU_SRC2_ZERO:     alu_in2 = 0;
-        default:            alu_in2 = {DBITS{1'bz}};
-    endcase
-end
-
-// ALU signals
-Alu #(
-    .BIT_WIDTH (DBITS)
-    ) alu (
-    .alu_fn (alu_fn),
-    .in1 (regs_out1),
-    .in2 (alu_in2),
-    .out (alu_out)
-);
-
-wire [DBITS-1:0] data_out;
-Memory #(
-    .MEM_INIT_FILE (DMEM_INIT_FILE),
-    .ADDR_BIT_WIDTH (DMEM_ADDR_BIT_WIDTH),
-    .DATA_BIT_WIDTH (DBITS)
-    ) data_memory (
+StageFetch #(
+    .DBITS (DBITS),
+    .START_PC (START_PC),
+    .IMEM_INIT_FILE (IMEM_INIT_FILE),
+    .IMEM_ADDR_BIT_WIDTH (IMEM_ADDR_BIT_WIDTH)
+    ) stageFetch (
     .clk (clk),
     .reset (reset),
-    .en_write (wr_mem),
-    .addr (alu_out[DBITS - 1: DMEM_WORD_BITS]),
-    .data_in (regs_out2),
-    .data_out (data_out),
+    .sel_pc (ex_pc_sel),
+    .next_pc (ex_next_pc),
+    .pc_stay (dec_stall),
+
+    .pc_out (fetch_pc),
+    .inst_word (fetch_inst_word)
+);
+
+
+reg [DBITS-1:0] dec_pc;
+reg [INST_BIT_WIDTH - 1: 0] dec_inst_word;
+always @(posedge clk) begin
+    if (dec_stall) begin
+
+    end else if (ex_pc_sel) begin
+        dec_pc <= 32'hzzzzzzz;
+        dec_inst_word <= 32'hzzzzzzz;
+    end else begin
+        if (fetch_inst_word != 32'hdead) begin
+            dec_pc <= fetch_pc;
+            dec_inst_word <= fetch_inst_word;
+
+        end else begin
+            dec_pc <= 32'hzzzzzzz;
+            dec_inst_word <= 32'hzzzzzzz;
+        end
+    end
+end
+
+
+wire [3:0] dec_alu_op;
+wire [4:0] dec_alu_fn;
+wire [DBITS-1:0] dec_imm_ext, dec_imm16;
+wire [1:0] dec_sel_alu_sr2, dec_sel_reg_din;
+wire dec_wr_reg, dec_wr_mem;
+StageDecode #(
+    .DBITS (DBITS),
+    .REG_INDEX_BIT_WIDTH (REG_INDEX_BIT_WIDTH)
+    ) stageDecode (
+    .clk (clk),
+    .reset (reset),
+    .inst_word (dec_inst_word),
+
+    .alu_op (dec_alu_op),
+    .alu_fn (dec_alu_fn),
+    .src_reg1_addr (dec_src_reg1_addr),
+    .src_reg2_addr (dec_src_reg2_addr),
+    .dest_reg_addr (dec_dest_reg_addr),
+    .imm_ext (dec_imm_ext),
+    .imm16 (dec_imm16),
+    .sel_alu_sr2 (dec_sel_alu_sr2),
+    .sel_reg_din (dec_sel_reg_din),
+    .wr_reg (dec_wr_reg),
+    .wr_mem (dec_wr_mem)
+);
+
+
+reg [DBITS-1:0] ex_pc;
+reg ex_wr_reg, ex_wr_mem;
+reg [REG_INDEX_BIT_WIDTH-1:0] ex_dest_reg_addr;
+reg [DBITS-1:0] ex_imm_ext, ex_imm16;
+reg [1:0] ex_sel_alu, ex_sel_reg_din;
+reg [DBITS-1:0] ex_reg1, ex_reg2;
+reg [3:0] ex_op_code;
+reg [4:0] ex_alu_fn;
+always @(posedge clk) begin
+    if (dec_stall || ex_pc_sel) begin
+        ex_pc <= 32'hzzzzzzzz;
+        ex_wr_reg <= 1'bz;
+        ex_wr_mem <= 1'bz;
+        ex_dest_reg_addr <= 4'hz;
+        ex_imm_ext <= 32'hzzzzzzzz;
+        ex_imm16 <= 32'hzzzzzzzz;
+        ex_sel_alu <= 2'bzz;
+        ex_reg1 <= 32'hzzzzzzzz;
+        ex_reg2 <= 32'hzzzzzzzz;
+        ex_op_code <= 4'bzzzz;
+        ex_alu_fn <= 5'bzzzzz;
+        ex_sel_reg_din <= 2'bzz;
+    end else begin
+        ex_pc <= dec_pc;
+        ex_wr_reg <= dec_wr_reg;
+        ex_wr_mem <= dec_wr_mem;
+        ex_dest_reg_addr <= dec_dest_reg_addr;
+        ex_imm_ext <= dec_imm_ext;
+        ex_imm16 <= dec_imm16;
+        ex_sel_alu <= dec_sel_alu_sr2;
+        ex_reg1 <= regs_out1;
+        ex_reg2 <= regs_out2;
+        ex_op_code <= dec_alu_op;
+        ex_alu_fn <= dec_alu_fn;
+        ex_sel_reg_din <= dec_sel_reg_din;
+    end
+end
+
+
+wire [DBITS-1:0] ex_alu_out;
+StageExecute #(
+    .BIT_WIDTH (DBITS),
+    .REG_INDEX_WIDTH (REG_INDEX_BIT_WIDTH)
+    ) stageExecute (
+    .clk (clk),
+    .op_code (ex_op_code),
+    .alu_fn (ex_alu_fn),
+    .pc (ex_pc),
+    .src_reg1 (ex_reg1),
+    .src_reg2 (ex_reg2),
+    .imm_ext (ex_imm_ext),
+    .sel_alu_src2 (ex_sel_alu),
+
+    .alu_out (ex_alu_out),
+    .pc_sel (ex_pc_sel),
+    .next_pc (ex_next_pc)
+);
+
+
+reg [DBITS-1:0] mem_pc;
+reg mem_wr_reg;
+reg mem_wr_mem;
+reg [REG_INDEX_BIT_WIDTH-1:0] mem_dest_reg_addr;
+reg [DBITS-1:0] mem_imm16, mem_alu_out, mem_regs_out2;
+reg [1:0] mem_sel_reg_din;
+always @(posedge clk) begin
+    mem_pc <= ex_pc;
+    mem_wr_reg <= ex_wr_reg;
+    mem_wr_mem <= ex_wr_mem;
+    mem_dest_reg_addr <= ex_dest_reg_addr;
+    mem_imm16 <= ex_imm16;
+    mem_alu_out <= ex_alu_out;
+    mem_regs_out2 <= ex_reg2;
+    mem_sel_reg_din <= ex_sel_reg_din;
+end
+
+
+wire [DBITS-1:0] mem_data_out;
+StageMem #(
+    .DBITS (DBITS),
+    .DMEM_INIT_FILE (DMEM_INIT_FILE),
+    .DMEM_ADDR_BIT_WIDTH (DMEM_ADDR_BIT_WIDTH)
+    ) stageMem (
+    .clk (clk),
+    .reset (reset),
+
+    .alu_out (mem_alu_out),
+    .regs_out2 (mem_regs_out2),
+    .wr_mem (mem_wr_mem),
+    .data_out (mem_data_out),
 
     .mmio_key_in (key_in),
     .mmio_sw_in (sw_in),
     .mmio_hex_out (hex_out),
     .mmio_ledr_out (ledr_out)
+);
+
+
+reg wb_wr_reg_in;
+reg [REG_INDEX_BIT_WIDTH-1:0] wb_dest_reg_addr;
+reg [DBITS-1:0] wb_imm16;
+reg [DBITS-1:0] wb_alu_out;
+reg [DBITS-1:0] wb_pc;
+reg [DBITS-1:0] wb_data_out;
+reg [1:0] wb_sel_reg_din;
+always @(posedge clk) begin
+    wb_wr_reg_in <= mem_wr_reg;
+    wb_dest_reg_addr <= mem_dest_reg_addr;
+    wb_imm16 <= mem_imm16;
+    wb_alu_out <= mem_alu_out;
+    wb_pc <= mem_pc;
+    wb_data_out <= mem_data_out;
+    wb_sel_reg_din <= mem_sel_reg_din;
+end
+
+
+StageWriteBack #(
+    .DBITS (DBITS),
+    .REG_INDEX_BIT_WIDTH (REG_INDEX_BIT_WIDTH)
+    ) stageWriteBack (
+    .clk (clk),
+    .reset (reset),
+
+    .dest_reg_addr (wb_dest_reg_addr),
+    .wr_reg_in (wb_wr_reg_in),
+    .imm16 (wb_imm16),
+    .alu_out (wb_alu_out),
+    .data_out (wb_data_out),
+    .pc (wb_pc),
+    .sel_reg_din (wb_sel_reg_din),
+
+    .wr_reg (wb_wr_reg),
+    .reg_addr (wb_reg_addr),
+    .reg_din (wb_reg_din)
 );
 
 endmodule

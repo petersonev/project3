@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 `include "Processor.v"
-`include "SCProc-Controller.v"
+`include "Decoder.v"
 
 module Processor_tb;
 
@@ -29,14 +29,14 @@ Processor #(
 );
 
 initial begin
-    $readmemh("../../assembly-files/test.hex", processor.instMem.data);
+    $readmemh("../../assembly-files/test.hex", processor.stageFetch.instMem.data);
     $dumpfile("Processor.vcd");
     $dumpvars(0, Processor_tb);
 
 
     $display("      PC         R0         R1         R2         R3         ",
         "R4         R5         R6         R7         R8         R9");
-    $monitor("%h", processor.pc_out[31:2],
+    $monitor("%h", processor.stageFetch.pc_out[31:2],
         processor.regs.REGS[0].regs.data_out,
         processor.regs.REGS[1].regs.data_out,
         processor.regs.REGS[2].regs.data_out,
@@ -68,6 +68,26 @@ initial begin
     @(posedge clk);
 
     @(instr_word == 32'h0000DEAD);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
+    @(posedge clk);
     @(posedge clk);
     @(posedge clk);
     $finish;
