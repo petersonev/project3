@@ -1,5 +1,5 @@
 `include "Processor.v"
-`include "SCProc-Controller.v"
+`include "Decoder.v"
 
 module Project2(
 input  [9:0] SW,

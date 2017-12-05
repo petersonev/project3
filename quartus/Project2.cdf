@@ -4,7 +4,7 @@ JedecChain;
 	DefaultMfr(6E);
 
 	P ActionCode(Cfg)
-		Device PartName(5CEBA4F23) Path("C:/Users/petersonev/Documents/cs-3220/project2/quartus/") File("Project2.sof") MfrSpec(OpMask(1));
+		Device PartName(5CEBA4F23) Path("C:/Users/petersonev/Documents/cs-3220/project3/quartus/") File("Project2.sof") MfrSpec(OpMask(1));
 
 ChainEnd;
 

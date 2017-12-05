@@ -3,13 +3,13 @@
 
 `include "Processor.vh"
 
-module SCProcController(
+module Decoder(
 input [INST_BIT_WIDTH-1:0] data,
-input [DATA_BIT_WIDTH-1:0] alu_out,
 output reg [4:0] alu_fn,
+output [3:0] opcode,
 output reg [REG_INDEX_WIDTH-1:0] src_reg1, src_reg2, dest_reg,
 output reg [IMM_BIT_WIDTH-1:0] imm,
-output reg [1:0] sel_alu_sr2, sel_pc, sel_reg_din,
+output reg [1:0] sel_alu_sr2, sel_reg_din,
 output reg wr_reg, wr_mem
 );
 
@@ -19,7 +19,6 @@ localparam INST_BIT_WIDTH = 32;
 localparam IMM_BIT_WIDTH = 16;
 
 wire [3:0] fn, b_fn;
-wire [3:0] opcode;
 
 assign fn = data[31:28];
 assign opcode = data[27:24];
@@ -39,7 +38,6 @@ always @(*) begin
     alu_fn      = 4'bzzzz;;
     wr_mem      = 1'b0;
     wr_reg      = 1'b0;
-    sel_pc      = `PC_IN_PC;
     sel_reg_din = 2'bzz;
     sel_alu_sr2 = 2'bzz;
     if (data[15:0] != `DEAD) begin
@@ -47,14 +45,12 @@ always @(*) begin
             `OP_ALUR: begin
                 alu_fn      = {1'b0, fn};
                 sel_alu_sr2 = `ALU_SRC2_REG2;
-                sel_pc      = `PC_IN_PC4;
                 wr_reg      = 1'b1;
                 sel_reg_din = `REG_IN_ALU;
             end
             `OP_ALUI: begin
                 alu_fn      = {1'b0, fn};
                 sel_alu_sr2 = `ALU_SRC2_IMM;
-                sel_pc      = `PC_IN_PC4;
                 wr_reg      = 1'b1;
                 sel_reg_din = `REG_IN_ALU;
                 if (alu_fn == `FN_MVHI)
@@ -63,14 +59,12 @@ always @(*) begin
             `OP_CMPR: begin
                 alu_fn      = {1'b1, fn};
                 sel_alu_sr2 = `ALU_SRC2_REG2;
-                sel_pc      = `PC_IN_PC4;
                 wr_reg      = 1'b1;
                 sel_reg_din = `REG_IN_ALU;
             end
             `OP_CMPI: begin
                 alu_fn      = {1'b1, fn};
                 sel_alu_sr2 = `ALU_SRC2_IMM;
-                sel_pc      = `PC_IN_PC4;
                 wr_reg      = 1'b1;
                 sel_reg_din = `REG_IN_ALU;
             end
@@ -85,21 +79,15 @@ always @(*) begin
                     sel_alu_sr2 = `ALU_SRC2_ZERO;
                 end
 
-                if (alu_out == 32'b1)
-                    sel_pc  = `PC_IN_IMM4;
-                else
-                    sel_pc  = `PC_IN_PC4;
             end
             `OP_SW: begin
                 alu_fn      = {1'b0, `FN_ADD};
                 sel_alu_sr2 = `ALU_SRC2_IMM;
-                sel_pc      = `PC_IN_PC4;
                 wr_mem      = 1'b1;
             end
             `OP_LW: begin
                 alu_fn      = {1'b0, `FN_ADD};
                 sel_alu_sr2 = `ALU_SRC2_IMM;
-                sel_pc      = `PC_IN_PC4;
                 wr_reg      = 1'b1;
                 sel_reg_din = `REG_IN_DOUT;
             end
@@ -108,7 +96,6 @@ always @(*) begin
                 sel_alu_sr2 = `ALU_SRC2_IMM4;
                 sel_reg_din = `REG_IN_PC4;
                 wr_reg      = 1'b1;
-                sel_pc  = `PC_IN_ALU;
             end
         endcase
     end

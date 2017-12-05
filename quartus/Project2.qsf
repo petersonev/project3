@@ -539,7 +539,6 @@ set_global_assignment -name STRATIXII_CONFIGURATION_DEVICE EPCS64
 set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "2.5 V"
 set_global_assignment -name MIF_FILE test.mif
 set_global_assignment -name VERILOG_INCLUDE_FILE Processor.vh
-set_global_assignment -name VERILOG_FILE "SCProc-Controller.v"
 set_global_assignment -name VERILOG_FILE RegisterFile.v
 set_global_assignment -name VERILOG_FILE Processor.v
 set_global_assignment -name VERILOG_FILE Mux4to1.v
